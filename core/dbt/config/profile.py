@@ -88,6 +88,7 @@ class Profile(HasCredentials):
     user_config: UserConfig
     threads: int
     credentials: Credentials
+    python_adapter_credentials: Optional[Credentials]
     profile_env_vars: Dict[str, Any]
 
     def __init__(
@@ -97,6 +98,7 @@ class Profile(HasCredentials):
         user_config: UserConfig,
         threads: int,
         credentials: Credentials,
+        python_adapter_credentials: Optional[Credentials],
     ):
         """Explicitly defining `__init__` to work around bug in Python 3.9.7
         https://bugs.python.org/issue45081
@@ -106,6 +108,7 @@ class Profile(HasCredentials):
         self.user_config = user_config
         self.threads = threads
         self.credentials = credentials
+        self.python_adapter_credentials = python_adapter_credentials
         self.profile_env_vars = {}  # never available on init
 
     def to_profile_info(self, serialize_credentials: bool = False) -> Dict[str, Any]:
@@ -123,10 +126,13 @@ class Profile(HasCredentials):
             "user_config": self.user_config,
             "threads": self.threads,
             "credentials": self.credentials,
+            "python_adapter_credentials": self.python_adapter_credentials,
         }
         if serialize_credentials:
             result["user_config"] = self.user_config.to_dict(omit_none=True)
             result["credentials"] = self.credentials.to_dict(omit_none=True)
+            if self.python_adapter_credentials:
+                result["python_adapter_credentials"] = self.python_adapter_credentials.to_dict(omit_none=True)
         return result
 
     def to_target_dict(self) -> Dict[str, Any]:
@@ -134,6 +140,7 @@ class Profile(HasCredentials):
         target.update(
             {
                 "type": self.credentials.type,
+                "python_adapter_type": self.python_adapter_credentials.type if self.python_adapter_credentials else None,
                 "threads": self.threads,
                 "name": self.target_name,
                 "target_name": self.target_name,
@@ -160,7 +167,7 @@ class Profile(HasCredentials):
 
     @staticmethod
     def _credentials_from_profile(
-        profile: Dict[str, Any], profile_name: str, target_name: str
+        profile: Dict[str, Any], profile_name: str, target_name: str, target_extra = ''
     ) -> Credentials:
         # avoid an import cycle
         from dbt.adapters.factory import load_plugin
@@ -169,8 +176,8 @@ class Profile(HasCredentials):
         # attributes. We do want this in order to pick our Credentials class.
         if "type" not in profile:
             raise DbtProfileError(
-                'required field "type" not found in profile {} and target {}'.format(
-                    profile_name, target_name
+                'required field "type" not found in profile {} and target {} {}'.format(
+                    profile_name, target_name, target_extra
                 )
             )
 
@@ -183,8 +190,8 @@ class Profile(HasCredentials):
         except (RuntimeException, ValidationError) as e:
             msg = str(e) if isinstance(e, RuntimeException) else e.message
             raise DbtProfileError(
-                'Credentials in profile "{}", target "{}" invalid: {}'.format(
-                    profile_name, target_name, msg
+                'Credentials in profile "{}", target "{}" {} invalid: {}'.format(
+                    profile_name, target_name, target_extra, msg
                 )
             ) from e
 
@@ -205,7 +212,7 @@ class Profile(HasCredentials):
     @staticmethod
     def _get_profile_data(
         profile: Dict[str, Any], profile_name: str, target_name: str
-    ) -> Dict[str, Any]:
+    ) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
         if "outputs" not in profile:
             raise DbtProfileError("outputs not specified in profile '{}'".format(profile_name))
         outputs = profile["outputs"]
@@ -228,7 +235,17 @@ class Profile(HasCredentials):
             )
             raise DbtProfileError(msg, result_type="invalid_target")
 
-        return profile_data
+        # main adapter should not be aware of python_adapter, but it's
+        # stored on a per-connection level in the raw configs
+        python_adapter_data = profile_data.pop("python_adapter", None)
+        if python_adapter_data and not isinstance(python_adapter_data, dict):
+            msg = (
+                f"output '{target_name}' of profile '{profile_name}' has 'python_adapter' "
+                f"property misconfigured in profiles.yml"
+            )
+            raise DbtProfileError(msg, result_type="invalid_target")
+
+        return profile_data, python_adapter_data
 
     @classmethod
     def from_credentials(
@@ -237,6 +254,7 @@ class Profile(HasCredentials):
         threads: int,
         profile_name: str,
         target_name: str,
+        python_adapter_credentials: Optional[Credentials],
         user_config: Optional[Dict[str, Any]] = None,
     ) -> "Profile":
         """Create a profile from an existing set of Credentials and the
@@ -262,6 +280,7 @@ class Profile(HasCredentials):
             user_config=user_config_obj,
             threads=threads,
             credentials=credentials,
+            python_adapter_credentials=python_adapter_credentials,
         )
         profile.validate()
         return profile
@@ -273,7 +292,7 @@ class Profile(HasCredentials):
         profile_name: str,
         target_override: Optional[str],
         renderer: ProfileRenderer,
-    ) -> Tuple[str, Dict[str, Any]]:
+    ) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         """This is a containment zone for the hateful way we're rendering
         profiles.
         """
@@ -293,13 +312,15 @@ class Profile(HasCredentials):
             target_name = "default"
             fire_event(MissingProfileTarget(profile_name=profile_name, target_name=target_name))
 
-        raw_profile_data = cls._get_profile_data(raw_profile, profile_name, target_name)
+        raw_profile_data, raw_python_profile_data = cls._get_profile_data(raw_profile, profile_name, target_name)
 
         try:
             profile_data = renderer.render_data(raw_profile_data)
+            python_profile_data = renderer.render_data(raw_python_profile_data) if raw_python_profile_data else None
         except CompilationException as exc:
             raise DbtProfileError(str(exc)) from exc
-        return target_name, profile_data
+
+        return target_name, profile_data, python_profile_data
 
     @classmethod
     def from_raw_profile_info(
@@ -333,7 +354,7 @@ class Profile(HasCredentials):
         if user_config is None:
             user_config = raw_profile.get("config")
         # TODO: should it be, and the values coerced to bool?
-        target_name, profile_data = cls.render_profile(
+        target_name, profile_data, python_profile_data = cls.render_profile(
             raw_profile, profile_name, target_override, renderer
         )
 
@@ -347,12 +368,17 @@ class Profile(HasCredentials):
             profile_data, profile_name, target_name
         )
 
+        python_adapter_credentials: Optional[Credentials] = cls._credentials_from_profile(
+            python_profile_data, profile_name, target_name, target_extra='python adapter'
+        ) if python_profile_data else None
+
         return cls.from_credentials(
             credentials=credentials,
             profile_name=profile_name,
             target_name=target_name,
             threads=threads,
             user_config=user_config,
+            python_adapter_credentials=python_adapter_credentials,
         )
 
     @classmethod

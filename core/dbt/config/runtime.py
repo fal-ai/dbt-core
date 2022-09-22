@@ -117,6 +117,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
             user_config=profile.user_config,
             threads=profile.threads,
             credentials=profile.credentials,
+            python_adapter_credentials=profile.python_adapter_credentials,
             args=args,
             cli_vars=cli_vars,
             dependencies=dependencies,
@@ -402,6 +403,7 @@ class UnsetProfile(Profile):
         self.profile_name = ""
         self.target_name = ""
         self.threads = -1
+        self.python_adapter_credentials = UnsetCredentials()
 
     def to_target_dict(self):
         return DictDefaultEmptyStr({})
@@ -558,6 +560,7 @@ class UnsetProfileConfig(RuntimeConfig):
             args=args,
             cli_vars=cli_vars,
             dependencies=dependencies,
+            python_adapter_credentials=profile.python_adapter_credentials
         )
 
     @classmethod
