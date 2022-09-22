@@ -117,6 +117,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
             user_config=profile.user_config,
             threads=profile.threads,
             credentials=profile.credentials,
+            python_adapter_credentials=profile.python_adapter_credentials,
             args=args,
             cli_vars=cli_vars,
             dependencies=dependencies,
