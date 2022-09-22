@@ -247,6 +247,7 @@ class ProfileConfig(HyphenatedDbtClassMixin, Replaceable):
     threads: int
     # TODO: make this a dynamic union of some kind?
     credentials: Optional[Dict[str, Any]]
+    python_adapter_credentials: Optional[Dict[str, Any]] = field(metadata={"preserve_underscore": True})
 
 
 @dataclass

@@ -217,7 +217,7 @@ class DebugTask(BaseTask):
 
         renderer = ProfileRenderer(self.cli_vars)
 
-        target_name, _ = Profile.render_profile(
+        target_name, _, _ = Profile.render_profile(
             raw_profile=raw_profile,
             profile_name=profile_name,
             target_override=getattr(self.args, "target", None),
