@@ -85,8 +85,9 @@ class AdapterContainer:
 
         return plugin.credentials
 
-    def register_adapter(self, config: AdapterRequiredConfig) -> None:
-        adapter_name = config.credentials.type
+    def register_adapter(self, config: AdapterRequiredConfig, adapter_name: Optional[str] = None) -> None:
+        if adapter_name is None:
+            adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
 
         with self.lock:
@@ -163,10 +164,22 @@ FACTORY: AdapterContainer = AdapterContainer()
 
 def register_adapter(config: AdapterRequiredConfig) -> None:
     FACTORY.register_adapter(config)
+    # Also register the python_adapter if it is specified
+    if config.python_adapter_credentials is not None:
+        FACTORY.register_adapter(config, config.python_adapter_credentials.type)
 
 
-def get_adapter(config: AdapterRequiredConfig):
-    return FACTORY.lookup_adapter(config.credentials.type)
+def get_adapter(config: AdapterRequiredConfig, language: str = 'sql'):
+    if language == 'sql':
+        return FACTORY.lookup_adapter(config.credentials.type)
+    elif language == 'python':
+        # TODO: should we add `python_adapter_credentials` to AdapterRequiredConfig?
+        if config.python_adapter_credentials is not None:
+            return FACTORY.lookup_adapter(config.python_adapter_credentials.type)
+        else:
+            return FACTORY.lookup_adapter(config.credentials.type)
+    else:
+        raise RuntimeException(f"Invalid adapter langauge {language}")
 
 
 def get_adapter_by_type(adapter_type):
