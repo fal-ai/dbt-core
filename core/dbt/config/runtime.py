@@ -321,6 +321,11 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
         if self.dependencies is None:
             all_projects = {self.project_name: self}
             internal_packages = get_include_paths(self.credentials.type)
+            if self.python_adapter_credentials:
+                internal_packages += get_include_paths(self.python_adapter_credentials.type)
+                # remove any repeated project (global project)
+                internal_packages = list(set(internal_packages))
+
             if base_only:
                 # Test setup -- we want to load macros without dependencies
                 project_paths = itertools.chain(internal_packages)
