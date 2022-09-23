@@ -188,7 +188,7 @@ class GraphRunnableTask(ManifestTask):
         return os.path.join(self.config.target_path, RESULT_FILE_NAME)
 
     def get_runner(self, node):
-        adapter = get_adapter(self.config)
+        adapter = get_adapter(self.config, getattr(node, 'language', 'sql'))
         run_count: int = 0
         num_nodes: int = 0
 
