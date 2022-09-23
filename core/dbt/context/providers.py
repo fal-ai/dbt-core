@@ -691,18 +691,18 @@ class ProviderContext(ManifestContext):
         # mypy appeasement - we know it'll be a RuntimeConfig
         self.config: RuntimeConfig
         self.model: Union[ParsedMacro, ManifestNode] = model
+        self.adapter = get_adapter(config, getattr(model, 'language', 'sql'))
         super().__init__(config, manifest, model.package_name)
         self.sql_results: Dict[str, AttrDict] = {}
         self.context_config: Optional[ContextConfig] = context_config
         self.provider: Provider = provider
-        self.adapter = get_adapter(self.config)
         # The macro namespace is used in creating the DatabaseWrapper
         self.db_wrapper = self.provider.DatabaseWrapper(self.adapter, self.namespace)
 
     # This overrides the method in ManifestContext, and provides
     # a model, which the ManifestContext builder does not
     def _get_namespace_builder(self):
-        internal_packages = get_adapter_package_names(self.config.credentials.type)
+        internal_packages = get_adapter_package_names(self.adapter.type())
         return MacroNamespaceBuilder(
             self.config.project_name,
             self.search_package,
