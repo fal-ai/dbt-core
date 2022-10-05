@@ -1374,12 +1374,15 @@ class ModelContext(ProviderContext):
 
     @contextmember
     def sync_teleport(self):
-        target_adapter = self.adapter
+        if TYPE_CHECKING:
+            from dbt.adapters.base.relation import BaseRelation
+            from dbt.adapters.teleport import TeleportAdapter
+
+        from dbt.teleport import teleport_adapter_or_wrapper, build_teleport_info
+
+        target_adapter: TeleportAdapter = self.adapter  # type: ignore
 
         for ref in self.model.refs:
-            if TYPE_CHECKING:
-                from dbt.adapters.base.relation import BaseRelation
-
             rel: BaseRelation = self.ref(*ref)  # type: ignore
 
             # HACK: to get the ref adapter for now, eventually should come "attached" to it
@@ -1391,33 +1394,22 @@ class ModelContext(ProviderContext):
             )  # type: ignore
 
             # adapter of the ref being processed
-            ref_adapter = get_adapter(self.config, node.language)
+            ref_adapter = teleport_adapter_or_wrapper(target_adapter, get_adapter(self.config, node.language))
 
             if target_adapter == ref_adapter:
                 # Do not process for same adapter
                 continue
 
-            # HACK: since target_adapter is the one calling `sync_teleport`, we will give it
-            # all responsability of loading/unloading
-            # HACK: Extra hacky is that it should finish loading it's data onto the db adapter,
-            # because the db adapter does not implement Teleport support yet
-            target_adapter.sync_teleport(rel)
-            continue
+            teleport_info = build_teleport_info(self.config, target_adapter, ref_adapter)
 
-            # But teleport should actually happen here and it would work for the multi-adapter world
-            from dbt.context.teleport import find_format # future module for teleport helpers
-
-            teleport_format = find_format(target_adapter, ref_adapter)
-
-            # TODO: where is the external storage integration configured?
-            # We get the relation_path ins the te shared teleport location
+            # We get the relation_path inside the shared teleport location
             # e.g. for `s3://dbt_python_models/teleport/my_db.my_schema.my_table.parquet` we get
             # `my_db.my_schema.my_table.parquet` and both adapters
             #  configure the rest `s3://dbt_python_models/teleport/`
-            relation_path = ref_adapter.teleport_to_external_storage(rel, teleport_format)
+            relation_path = ref_adapter.teleport_to_external_storage(rel, teleport_info)
 
             # Make it locally available to the target adapter
-            target_adapter.teleport_from_external_storage(rel, relation_path, teleport_format)
+            target_adapter.teleport_from_external_storage(rel, relation_path, teleport_info)
 
 # This is called by '_context_for', used in 'render_with_context'
 def generate_parser_model_context(
