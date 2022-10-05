@@ -1378,7 +1378,7 @@ class ModelContext(ProviderContext):
             from dbt.adapters.base.relation import BaseRelation
             from dbt.adapters.teleport import TeleportAdapter
 
-        from dbt.teleport import teleport_adapter_or_wrapper, build_teleport_info
+        from dbt.teleport import build_teleport_info, is_teleport_adapter
 
         target_adapter: TeleportAdapter = self.adapter  # type: ignore
 
@@ -1394,7 +1394,10 @@ class ModelContext(ProviderContext):
             )  # type: ignore
 
             # adapter of the ref being processed
-            ref_adapter = teleport_adapter_or_wrapper(target_adapter, get_adapter(self.config, node.language))
+            ref_adapter: TeleportAdapter = get_adapter(self.config, node.language)  # type: ignore
+
+            if not is_teleport_adapter(ref_adapter):
+                raise NotImplementedError(f"Teleport not implemented for adapter {ref_adapter.type()}")
 
             if target_adapter == ref_adapter:
                 # Do not process for same adapter

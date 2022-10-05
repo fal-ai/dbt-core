@@ -33,8 +33,6 @@ class TeleportAdapter:
 
     """
 
-    wrapper: Optional["TeleportAdapter"]
-
     @classmethod
     @abc.abstractmethod
     def storage_formats(cls) -> List[str]:

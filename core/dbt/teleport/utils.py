@@ -13,19 +13,6 @@ def is_teleport_adapter(adapter: Union[BaseAdapter, TeleportAdapter]) -> bool:
     ]
     return isinstance(adapter, TeleportAdapter) or all(map(lambda m: hasattr(adapter, m), methods))
 
-def teleport_adapter_or_wrapper(target_adapter: TeleportAdapter, ref_adapter: Union[BaseAdapter, TeleportAdapter]) -> TeleportAdapter:
-    """
-    Check if teleport method exists in ref or in wrapper and return accordingly
-    """
-
-    if is_teleport_adapter(ref_adapter):
-        return ref_adapter
-    elif hasattr(target_adapter, 'wrapper') and target_adapter.wrapper:
-        # TODO: info(f"Adapter {target_adapter.type()} taking over Teleport implementations of {ref_adapter.type()}")
-        return target_adapter.wrapper
-    else:
-        raise NotImplementedError(f"Teleport not implemented for adapter {ref_adapter.type()}")
-
 def find_format(target_adapter: TeleportAdapter, ref_adapter: TeleportAdapter):
     target_formats = target_adapter.storage_formats()
     ref_formats = ref_adapter.storage_formats()
