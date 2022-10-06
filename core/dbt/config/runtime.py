@@ -407,6 +407,7 @@ class UnsetProfile(Profile):
         self.user_config = UserConfig()  # This will be read in _get_rendered_profile
         self.profile_name = ""
         self.target_name = ""
+        self.python_adapter_credentials: Optional[Credentials] = None
         self.threads = -1
 
     def to_target_dict(self):
@@ -561,6 +562,7 @@ class UnsetProfileConfig(RuntimeConfig):
             user_config=UserConfig(),
             threads=getattr(args, "threads", 1),
             credentials=UnsetCredentials(),
+            python_adapter_credentials=profile.python_adapter_credentials,
             args=args,
             cli_vars=cli_vars,
             dependencies=dependencies,
